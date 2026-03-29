@@ -108,53 +108,52 @@ function App() {
   };
   
   const handleConfirm = async (signalId: string) => {
-    // 1. 更新前端状态
     setSignals(prev => prev.map(s =>
       s.id === signalId ? { ...s, status: 'confirmed' as SignalStatus } : s
     ));
 
-    // 2. 更新signals表状态
-    await supabase
-      .from('signals')
-      .update({ status: 'confirmed', sales_confirmed: true })
-      .eq('id', signalId);
-
-    // 3. 找到这个signal对应的数据
     const confirmedSignal = signals.find(s => s.id === signalId);
     if (!confirmedSignal) return;
 
-    // 4. 确认后才写入notification
-    await supabase.from('notifications').insert({
-      customer_id: confirmedSignal.customerId,
-      signal_id: signalId,
-      message: confirmedSignal.salesTip,
-      status: 'sent'
-    });
-
-    // 5. 确认后才更新客户档案
-    if (confirmedSignal.type === 'budget') {
+    // 只有真实UUID才写Supabase，mock数据的短id跳过
+    const isRealId = signalId.includes('-');
+    
+    if (isRealId) {
       await supabase
-        .from('customers')
-        .update({ budget_signal: 'pressure' })
-        .eq('id', confirmedSignal.customerId);
+        .from('signals')
+        .update({ status: 'confirmed', sales_confirmed: true })
+        .eq('id', signalId);
 
+      await supabase.from('notifications').insert({
+        customer_id: confirmedSignal.customerId,
+        signal_id: signalId,
+        message: confirmedSignal.salesTip,
+        status: 'sent'
+      });
+    }
+
+    // 客户档案更新（前端状态无论如何都更新）
+    if (confirmedSignal.type === 'budget') {
+      if (isRealId) {
+        await supabase
+          .from('customers')
+          .update({ budget_signal: 'pressure' })
+          .eq('id', confirmedSignal.customerId);
+      }
       setCustomers(prev => prev.map(c =>
-        c.id === confirmedSignal.customerId
-          ? { ...c, budgetSignal: 'pressure' }
-          : c
+        c.id === confirmedSignal.customerId ? { ...c, budgetSignal: 'pressure' } : c
       ));
     }
 
     if (confirmedSignal.type === 'risk') {
-      await supabase
-        .from('customers')
-        .update({ risk_level: 'high' })
-        .eq('id', confirmedSignal.customerId);
-
+      if (isRealId) {
+        await supabase
+          .from('customers')
+          .update({ risk_level: 'high' })
+          .eq('id', confirmedSignal.customerId);
+      }
       setCustomers(prev => prev.map(c =>
-        c.id === confirmedSignal.customerId
-          ? { ...c, riskLevel: 'high' }
-          : c
+        c.id === confirmedSignal.customerId ? { ...c, riskLevel: 'high' } : c
       ));
     }
 
